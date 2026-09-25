@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Substitution Integral Simulation</title>
+<style>
+:root{
+  --bg:#f7f7f5; --card:#ffffff; --text:#1a1a1a; --muted:#6b6b6b;
+  --accent:#2563eb; --accent2:#dc2626; --border:#e2e2e0;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#15161a; --card:#1e2027; --text:#eaeaea; --muted:#9a9a9a;
+    --accent:#60a5fa; --accent2:#f87171; --border:#33353c;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#15161a; --card:#1e2027; --text:#eaeaea; --muted:#9a9a9a;
+  --accent:#60a5fa; --accent2:#f87171; --border:#33353c;
+}
+*{box-sizing:border-box;}
+html,body{height:100%;}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  padding:24px 16px 40px;
+}
+.wrap{max-width:820px;margin:0 auto;}
+h1{font-size:1.3rem;margin:0 0 4px;}
+.sub{color:var(--muted);font-size:.92rem;margin:0 0 18px;}
+.formula{
+  background:var(--card);border:1px solid var(--border);border-radius:12px;
+  padding:14px 16px;font-size:1.05rem;margin-bottom:20px;overflow-x:auto;
+}
+.card{
+  background:var(--card);border:1px solid var(--border);border-radius:14px;
+  padding:18px;margin-bottom:16px;
+}
+.controls{display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
+input[type=range]{flex:1;min-width:160px;accent-color:var(--accent);}
+.nval{font-weight:600;min-width:30px;text-align:center;}
+.panels{display:flex;gap:16px;flex-wrap:wrap;}
+.panel{flex:1;min-width:260px;}
+canvas{width:100%;height:220px;display:block;border-radius:8px;background:transparent;}
+.panel h3{margin:0 0 6px;font-size:.95rem;color:var(--muted);font-weight:600;}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:6px;}
+.stat{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;}
+.stat .label{font-size:.78rem;color:var(--muted);}
+.stat .val{font-size:1.15rem;font-weight:700;margin-top:2px;}
+.footnote{color:var(--muted);font-size:.82rem;margin-top:18px;line-height:1.5;}
+.overflow{overflow-x:auto;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Definite Integral via Substitution</h1>
+  <p class="sub">Visualizing ∫₁² x√(x−1) dx through u = x − 1</p>
+
+  <div class="formula overflow">
+    ∫₁² x·√(x−1) dx &nbsp;=&nbsp; ∫₀¹ (u+1)·√u du &nbsp;=&nbsp; [ (2/5)u<sup>5/2</sup> + (2/3)u<sup>3/2</sup> ]₀¹ &nbsp;=&nbsp; 16/15 ≈ 1.0667
+  </div>
+
+  <div class="card">
+    <div class="controls">
+      <label for="n" style="font-size:.9rem;color:var(--muted);">Subintervals (N)</label>
+      <input type="range" id="n" min="5" max="100" value="20" step="1">
+      <span class="nval" id="nval">20</span>
+    </div>
+    <div class="panels" style="margin-top:16px;">
+      <div class="panel">
+        <h3>Original domain — f(x) = x√(x−1), x ∈ [1,2]</h3>
+        <canvas id="cx"></canvas>
+      </div>
+      <div class="panel">
+        <h3>Transformed domain — g(u) = (u+1)√u, u ∈ [0,1]</h3>
+        <canvas id="cu"></canvas>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="label">Riemann sum (left, x-space)</div><div class="val" id="sx">-</div></div>
+      <div class="stat"><div class="label">Riemann sum (left, u-space)</div><div class="val" id="su">-</div></div>
+      <div class="stat"><div class="label">Exact value</div><div class="val">16/15 ≈ 1.0667</div></div>
+      <div class="stat"><div class="label">Error (approx − exact)</div><div class="val" id="err">-</div></div>
+    </div>
+  </div>
+
+  <p class="footnote">
+    Because du = dx, every subinterval width stays identical between the two domains (Δu = Δx) — there is no
+    stretching or compression under this substitution. As N increases, both left-Riemann-sum approximations
+    converge to the same exact value, 16/15, confirming that the substitution preserves area even though the
+    curve's shape changes completely from x-space to u-space.
+  </p>
+</div>
+
+<script>
+function fx(x){ return x*Math.sqrt(Math.max(x-1,0)); }
+function gu(u){ return (u+1)*Math.sqrt(Math.max(u,0)); }
+
+function drawPanel(canvas, fn, xmin, xmax, rectMin, rectMax, n, color, axisLabel){
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  canvas.width = w*dpr; canvas.height = h*dpr;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,w,h);
+
+  const pad = {l:36,r:10,t:10,b:26};
+  const plotW = w - pad.l - pad.r, plotH = h - pad.t - pad.b;
+
+  // sample curve for y range
+  let ymax = 0;
+  const steps = 200;
+  for(let i=0;i<=steps;i++){
+    const x = xmin + (xmax-xmin)*i/steps;
+    ymax = Math.max(ymax, fn(x));
+  }
+  ymax *= 1.15;
+
+  const X = x => pad.l + (x-xmin)/(xmax-xmin)*plotW;
+  const Y = y => pad.t + plotH - (y/ymax)*plotH;
+
+  const isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const gridColor = isDark ? '#33353c' : '#e2e2e0';
+  const textColor = isDark ? '#9a9a9a' : '#6b6b6b';
+
+  // axes
+  ctx.strokeStyle = gridColor; ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(pad.l, pad.t); ctx.lineTo(pad.l, pad.t+plotH); ctx.lineTo(pad.l+plotW, pad.t+plotH);
+  ctx.stroke();
+  ctx.fillStyle = textColor; ctx.font = '11px sans-serif';
+  ctx.fillText(xmin.toString(), pad.l-2, pad.t+plotH+14);
+  ctx.fillText(xmax.toString(), pad.l+plotW-14, pad.t+plotH+14);
+  ctx.fillText(axisLabel, pad.l+plotW/2-10, h-4);
+
+  // rectangles (left Riemann)
+  const dw = (rectMax-rectMin)/n;
+  ctx.fillStyle = color+'55'; ctx.strokeStyle = color;
+  for(let i=0;i<n;i++){
+    const rx = rectMin + i*dw;
+    const ry = fn(rx);
+    const x0 = X(rx), x1 = X(rx+dw);
+    const y0 = Y(0), y1 = Y(ry);
+    ctx.fillRect(x0, y1, x1-x0, y0-y1);
+    ctx.strokeRect(x0, y1, x1-x0, y0-y1);
+  }
+
+  // curve
+  ctx.strokeStyle = color; ctx.lineWidth = 2.2;
+  ctx.beginPath();
+  for(let i=0;i<=steps;i++){
+    const x = xmin + (xmax-xmin)*i/steps;
+    const px = X(x), py = Y(fn(x));
+    if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+  }
+  ctx.stroke();
+}
+
+function riemannLeft(fn, a, b, n){
+  const dw = (b-a)/n; let sum=0;
+  for(let i=0;i<n;i++) sum += fn(a+i*dw)*dw;
+  return sum;
+}
+
+function render(){
+  const n = parseInt(document.getElementById('n').value,10);
+  document.getElementById('nval').textContent = n;
+
+  const cx = document.getElementById('cx'), cu = document.getElementById('cu');
+  drawPanel(cx, fx, 1, 2.15, 1, 2, n, getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#2563eb', 'x');
+  drawPanel(cu, gu, 0, 1.15, 0, 1, n, getComputedStyle(document.documentElement).getPropertyValue('--accent2').trim() || '#dc2626', 'u');
+
+  const sx = riemannLeft(fx, 1, 2, n);
+  const su = riemannLeft(gu, 0, 1, n);
+  document.getElementById('sx').textContent = sx.toFixed(4);
+  document.getElementById('su').textContent = su.toFixed(4);
+  document.getElementById('err').textContent = (su - 16/15).toFixed(4);
+}
+
+document.getElementById('n').addEventListener('input', render);
+window.addEventListener('resize', render);
+render();
+</script>
+</body>
+</html>
